@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+venv/
+.env
+.env.local
+
+# Model weights (large files, download on setup)
+models/*.pth
+models/*.pt
+models/LongCat-Video/
+models/LongCat-Video-Avatar-1.5/
+models/dit/
+
+# Generated outputs
+output/
+uploads/
+themes/custom/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
