@@ -189,10 +189,9 @@ class KlingVideoEngine:
 
             return self.download_video(video_url, output_path)
 
-        except Exception as e:
-            print(f"Kling generate_clip error: {e}")
+        except Exception:
             if on_progress:
-                on_progress(0, f"Kling failed: {e}")
+                on_progress(0, "Kling clip generation failed")
             return None
 
 
@@ -206,21 +205,49 @@ def _get_engine() -> KlingVideoEngine:
     return _engine
 
 
+_kling_spend_counter = 0
+KLING_MAX_SPEND = 15
+
 def generate_scene_video(
     prompt: str,
     duration_sec: int = 5,
     output_path: str = None,
     image_path: str = None,
     on_progress=None,
+    max_retries: int = 3,
 ) -> str | None:
+    global _kling_spend_counter
+    if _kling_spend_counter >= KLING_MAX_SPEND:
+        if on_progress:
+            on_progress(0, "Kling spend cap reached, skipping remaining scenes")
+        return None
+
     engine = _get_engine()
-    return engine.generate_clip(
-        prompt=prompt,
-        duration_sec=duration_sec,
-        output_path=output_path,
-        image_path=image_path,
-        on_progress=on_progress,
-    )
+    for attempt in range(1, max_retries + 1):
+        if _kling_spend_counter >= KLING_MAX_SPEND:
+            return None
+        if on_progress and attempt > 1:
+            on_progress(0, f"Kling retry {attempt}/{max_retries}...")
+        result = engine.generate_clip(
+            prompt=prompt,
+            duration_sec=duration_sec,
+            output_path=output_path,
+            image_path=image_path,
+            on_progress=on_progress,
+        )
+        if result:
+            _kling_spend_counter += 1
+            return result
+        if on_progress:
+            on_progress(0, f"Kling attempt {attempt} failed, retrying...")
+        time.sleep(3)
+    if on_progress:
+        on_progress(0, f"Kling gave up on: {prompt[:50]}...")
+    return None
+
+def reset_kling_spend():
+    global _kling_spend_counter
+    _kling_spend_counter = 0
 
 
 def run_kling_scene_generation(
@@ -271,6 +298,7 @@ def run_kling_scene_generation(
                 "text": scene.text,
             })
         else:
-            print(f"Kling scene {i} failed, skipping")
+            if on_progress:
+                on_progress(0, f"Kling scene {i} failed, skipping")
 
     return clip_results

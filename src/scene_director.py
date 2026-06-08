@@ -1,83 +1,91 @@
 from typing import List, Dict, Optional
 
 
+_QUALITY = (
+    "8K ultra high definition, cinematic color grading, professional broadcast quality, "
+    "arri alexa 65 cinema camera, master anamorphic lens, 24fps film look, "
+    "volumetric lighting, ray traced global illumination, photorealistic detail, "
+    "no distortion, no grain, pristine image quality, professional grade output"
+)
+
 ANCHOR_VISUAL_PROMPTS = {
     "neutral": (
-        "professional presenter, calm authoritative presence, well-lit studio, "
+        "professional news anchor, calm authoritative presence, premium broadcast studio, "
         "formal business attire, looking directly at camera, symmetrical composition, "
-        "4K cinematic, soft key lighting, shallow depth of field, professional broadcast ambiance"
+        "soft key lighting with fill lights, shallow depth of field, "
+        "clean neutral background with subtle bokeh,"
     ),
     "professional": (
-        "professional presenter in high-end studio, confident poised demeanor, "
-        "clean modern aesthetic, broadcast quality lighting, 4K cinematic, "
-        "professional atmosphere, sharp focus, elegant composition"
+        "professional news presenter, poised confident demeanor, "
+        "high-end digital studio, clean modern aesthetic, broadcast quality three-point lighting, "
+        "sharp focus, elegant composition, premium set design,"
     ),
     "casual": (
-        "relaxed friendly presenter, warm natural smile, casual comfortable setting, "
-        "conversational tone, soft natural lighting, 4K cinematic, "
-        "inviting atmosphere, genuine expression, lifestyle style composition"
+        "relaxed friendly presenter, warm natural smile, comfortable setting, "
+        "conversational tone, soft natural window lighting, "
+        "inviting atmosphere, genuine expression, lifestyle style composition,"
     ),
     "dramatic": (
-        "intense dramatic presenter, serious focused expression, dramatic studio lighting, "
-        "dynamic shadows, powerful presence, 4K cinematic, "
-        "dramatic atmosphere, high contrast lighting, compelling composition"
+        "intense dramatic presenter, serious focused expression, dramatic chiaroscuro lighting, "
+        "dynamic shadows, powerful commanding presence, "
+        "high contrast lighting, compelling documentary composition,"
     ),
 }
 
 TOPIC_B_ROLL_PROMPTS = {
     "technology": (
         "futuristic technology visualization, advanced AI neural network animation, "
-        "glowing digital circuits and data streams, blue and purple neon lighting, "
-        "holographic displays, cinematic 4K, motion design, tech documentary style, "
-        "smooth camera movement, professional visual effects"
+        "glowing digital circuits and fiber optic data streams, blue and purple neon cinematic lighting, "
+        "holographic user interfaces floating in air, cinematic motion design, "
+        "smooth camera dolly movement, 8K tech documentary visual quality,"
     ),
     "business": (
-        "professional corporate environment, modern skyscraper cityscape, "
-        "stock market data visualization, glass and steel architecture, "
-        "clean professional aesthetic, cinematic 4K, corporate documentary style, "
-        "golden hour lighting, smooth gimbal shot"
+        "professional corporate environment, modern skyscraper cityscape at golden hour, "
+        "stock market data visualization with dynamic graphs, glass and steel architecture, "
+        "clean professional aesthetic, cinematic gimbal shot through city, "
+        "corporate documentary style, dramatic cloud reflections on glass,"
     ),
     "health": (
-        "advanced medical research laboratory, DNA double helix visualization, "
-        "clean sterile environment, scientific equipment in motion, "
-        "blue and white color palette, cinematic 4K, medical documentary style, "
-        "precise lighting, professional scientific atmosphere"
+        "advanced medical research laboratory, DNA double helix 3D visualization, "
+        "clean sterile futuristic environment, scientific equipment in precision motion, "
+        "blue and white medical color palette, cinematic medical documentary quality, "
+        "precise volumetric lighting, professional scientific atmosphere,"
     ),
     "science": (
-        "cosmic space exploration visualization, distant galaxies and nebulae, "
-        "scientific discovery atmosphere, laboratory research setting, "
-        "mysterious deep space background, cinematic 4K, BBC documentary style, "
-        "dramatic lighting, awe-inspiring composition"
+        "cosmic space exploration visualization, distant galaxies and colorful nebulae, "
+        "scientific breakthrough atmosphere, advanced laboratory research setting, "
+        "mysterious deep space background with stars, BBC documentary style, "
+        "dramatic cinematic lighting, awe-inspiring reverent composition,"
     ),
     "sports": (
-        "professional sports arena, dramatic stadium lighting, "
-        "championship trophy visualization, dynamic action freeze frames, "
-        "crowd atmosphere, cinematic 4K, sports documentary style, "
-        "golden hour exterior shots, professional broadcast quality"
+        "professional sports arena packed with crowd, dramatic stadium lighting from above, "
+        "championship trophy gleaming under spotlights, dynamic action in slow motion, "
+        "electric atmosphere, cinematic sports documentary quality, "
+        "golden hour exterior establishing shot, professional broadcast grade,"
     ),
     "breaking": (
-        "emergency news coverage atmosphere, red alert visualization, "
-        "newsroom chaos organized, urgent breaking news graphics, "
-        "dramatic lighting with red accents, cinematic 4K, "
-        "intense documentary style, urgent professional broadcast"
+        "urgent emergency news coverage atmosphere, red alert visualization with pulsing lights, "
+        "organized newsroom chaos, urgent breaking news lower graphics, "
+        "dramatic lighting with red and blue emergency accents, "
+        "intense documentary style, urgent professional broadcast quality,"
     ),
     "politics": (
-        "government building exterior, parliament or capitol architecture, "
-        "formal debate chamber, national flags, official ceremony setting, "
-        "cinematic 4K, political documentary style, authoritative composition, "
-        "grand architecture, professional news coverage"
+        "grand government building exterior, parliament architecture, "
+        "formal debate chamber with ornate details, national flags in slow motion, "
+        "official ceremony setting, cinematic political documentary quality, "
+        "authoritative composition, grand architecture, professional news coverage,"
     ),
     "weather": (
-        "dramatic weather visualization, atmospheric cloud formations, "
-        "dynamic climate maps with data overlays, storm systems, "
-        "meteorological graphics, cinematic 4K, weather documentary style, "
-        "dramatic sky lighting, professional forecast studio"
+        "dramatic weather visualization, atmospheric cloud formations with lightning, "
+        "dynamic climate maps with holographic data overlays, massive storm systems, "
+        "meteorological satellite imagery, cinematic weather documentary quality, "
+        "dramatic storm lighting, professional forecast center visuals,"
     ),
     "default": (
         "professional broadcast news studio, state-of-the-art production facility, "
-        "multiple camera setup, broadcast quality lighting, "
-        "clean modern design, cinematic 4K, professional news production, "
-        "smooth camera operation, high-end television production quality"
+        "multiple camera professional setup, broadcast quality studio lighting, "
+        "clean modern newsroom design, high-end broadcast production quality, "
+        "smooth camera operation, television network production quality,"
     ),
 }
 
@@ -183,7 +191,7 @@ def plan_scenes(
             anchor_prompt = (
                 f"{ANCHOR_VISUAL_PROMPTS.get(seg_style, ANCHOR_VISUAL_PROMPTS['neutral'])}, "
                 f"opening introduction about {topic}, {cinematic}, "
-                f"{bkg_prompt[:100]}"
+                f"{bkg_prompt[:100]}, {_QUALITY}"
             )
             duration = max(8.0, min(20.0, total_seconds * 0.25))
             scene = Scene("anchor", anchor_prompt, duration,
@@ -195,7 +203,7 @@ def plan_scenes(
             anchor_prompt = (
                 f"{ANCHOR_VISUAL_PROMPTS.get(seg_style, ANCHOR_VISUAL_PROMPTS['neutral'])}, "
                 f"concluding remarks about {topic}, professional sign-off, {cinematic}, "
-                f"{bkg_prompt[:100]}"
+                f"{bkg_prompt[:100]}, {_QUALITY}"
             )
             duration = max(10.0, min(25.0, total_seconds * 0.3))
             scene = Scene("anchor", anchor_prompt, duration,
@@ -208,7 +216,7 @@ def plan_scenes(
                 words = seg_text.split()[:12]
                 broll_prompt = (
                     f"{' '.join(words)}, {bkg_prompt}, "
-                    f"matching broadcast atmosphere, {cinematic}"
+                    f"matching broadcast atmosphere, {cinematic}, {_QUALITY}"
                 )
                 duration = max(5.0, min(12.0, total_seconds / num_segments))
                 scene = Scene("broll", broll_prompt, duration,

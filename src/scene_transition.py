@@ -82,15 +82,30 @@ def stitch_with_transitions(
             current = str(segment_out)
         else:
             if on_progress:
-                on_progress(0, f"Transition {i} failed, using simple concat")
-            import shutil
+                on_progress(0, f"Transition {i} failed, using concat fallback")
             fallback = config.OUTPUT_DIR / f"transition_fb_{uuid.uuid4().hex[:8]}.mp4"
-            with open(str(fallback), "wb") as f:
-                with open(current, "rb") as c:
-                    f.write(c.read())
-                with open(clip_paths[i], "rb") as c:
-                    f.write(c.read())
-            current = str(fallback)
+            concat_list = config.OUTPUT_DIR / f"concat_list_{uuid.uuid4().hex[:8]}.txt"
+            try:
+                with open(str(concat_list), "w") as f:
+                    f.write(f"file '{Path(current).as_posix()}'\n")
+                    f.write(f"file '{Path(clip_paths[i]).as_posix()}'\n")
+                concat_cmd = [
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list),
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                    "-pix_fmt", "yuv420p",
+                    str(fallback),
+                ]
+                subprocess.run(concat_cmd, capture_output=True, check=True)
+                if fallback.exists():
+                    current = str(fallback)
+            except Exception as ce:
+                print(f"Concat fallback also failed: {ce}")
+            finally:
+                try:
+                    concat_list.unlink()
+                except Exception:
+                    pass
 
     final = Path(output_path)
     final.parent.mkdir(parents=True, exist_ok=True)

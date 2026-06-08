@@ -1,3 +1,4 @@
+import traceback
 import subprocess
 import time
 import uuid
@@ -13,7 +14,7 @@ from src.sarvam_tts import generate_speech_sarvam, sarvam_available
 from src.character_compositor import prepare_character_scene
 from src.motion_enhancer import enhance_video as enhance_motion_video
 from src.dit_pipeline import run_dit_pipeline, dit_available
-from src.kling_video import kling_available, run_kling_scene_generation, generate_scene_video
+from src.kling_video import kling_available, run_kling_scene_generation, generate_scene_video, reset_kling_spend
 from src.video_enhancer import VideoUpscaler, ColorGrader, combine_with_color_correction
 from src.scene_transition import stitch_with_transitions
 from src.scene_director import plan_scenes
@@ -94,6 +95,7 @@ def run_full_pipeline(
     use_dit_actual = use_dit and dit_available()
     use_longcat_actual = use_longcat and longcat_available()
     use_kling_actual = use_kling and kling_available()
+    reset_kling_spend()
 
     if use_dit_actual and not use_longcat_actual and not use_kling_actual:
         return run_dit_pipeline(
@@ -120,73 +122,156 @@ def run_full_pipeline(
 
     if on_progress:
         on_progress(5, "Generating script...")
+    script = None
 
-    if use_ai_script and topic.strip():
-        script = generate_news_script(topic, news_style, language, duration_minutes)
-    elif manual_text.strip():
-        script = generate_manual_script("Custom News", manual_text)
-    else:
+    try:
+        if use_ai_script and topic.strip():
+            script = generate_news_script(topic, news_style, language, duration_minutes)
+        elif manual_text.strip():
+            script = generate_manual_script("Custom News", manual_text)
+        else:
+            script = generate_manual_script("News", "This is a test broadcast.")
+    except Exception:
+        if on_progress:
+            on_progress(5, "Script generation failed, using fallback script")
+        script = generate_manual_script("News", "This is a test broadcast.")
+    if not script or not script.get("segments"):
         script = generate_manual_script("News", "This is a test broadcast.")
 
     if on_progress:
         on_progress(20, "Generating voiceover...")
 
-    full_text = " ".join(s["text"] for s in script["segments"])
+    segs = script.get("segments", [])
+    full_text = " ".join(s["text"] for s in segs)
     audio_path = None
+    per_seg_audio_durs = []
 
-    if use_sarvam and sarvam_available():
-        if on_progress:
-            on_progress(20, "Sarvam AI voice...")
-        audio_path = generate_speech_sarvam(
-            full_text, config.OUTPUT_DIR / "temp_audio.wav", language, gender,
-            voice=sarvam_voice,
-        )
-
-    if audio_path is None and use_elevenlabs and elevenlabs_available():
-        audio_path = generate_speech_elevenlabs(
-            full_text, config.OUTPUT_DIR / "temp_audio.mp3", language
-        )
-
-    if audio_path is None:
-        audio_path = generate_speech(script, voice, speed, language, gender, accent)
-    if audio_path is None:
-        audio_path = generate_speech_from_text(
-            full_text, voice, speed, language, gender, accent,
-        )
-    if audio_path is None or not audio_path.exists():
-        raise RuntimeError("Failed to generate audio")
-
-    # === HELPERS: audio timing & segment extraction ===
-    def _get_audio_duration_sec(audio_p: Path) -> float:
+    def _get_file_duration(p: Path) -> float:
         try:
             cmd = ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
-                   "-of", "csv=p=0", str(audio_p)]
+                   "-of", "csv=p=0", str(p)]
             r = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return float(r.stdout.strip())
         except Exception:
-            return duration_minutes * 60.0
+            return 0.0
 
-    def _stage_interleaved_edit(scenes_list, lc_video_path, audio_dur):
-        """Build broadcast edit: anchor (LongCat) ↔ broll (Kling) interleaved."""
-        segs = script.get("segments", [])
-        if not segs:
+    # --- Per-segment audio for Sarvam (precise timing) ---
+    if use_sarvam and sarvam_available() and segs:
+        if on_progress:
+            on_progress(20, "Sarvam AI voice (per-segment)...")
+        seg_audio_paths = []
+        for si, seg in enumerate(segs):
+            seg_text = seg["text"]
+            if not seg_text.strip():
+                continue
+            seg_out = config.OUTPUT_DIR / f"temp_seg_audio_{output_id}_{si}.wav"
+            result = generate_speech_sarvam(
+                seg_text, seg_out, language, gender, voice=sarvam_voice,
+            )
+            if result and result.exists():
+                seg_audio_paths.append((si, result))
+            else:
+                if on_progress:
+                    on_progress(20, f"Segment {si} audio failed, skipping")
+        if seg_audio_paths:
+            concat_list_p = config.OUTPUT_DIR / f"concat_audio_{output_id}.txt"
+            try:
+                with open(str(concat_list_p), "w") as cf:
+                    for _, sap in seg_audio_paths:
+                        cf.write(f"file '{sap.as_posix()}'\n")
+                full_audio = config.OUTPUT_DIR / "temp_audio.wav"
+                cat_cmd = [
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                    "-i", str(concat_list_p),
+                    "-c", "copy", str(full_audio),
+                ]
+                subprocess.run(cat_cmd, capture_output=True, check=True)
+                if full_audio.exists():
+                    audio_path = full_audio
+                for _, sap in seg_audio_paths:
+                    d = _get_file_duration(sap)
+                    per_seg_audio_durs.append(d)
+            except Exception:
+                if on_progress:
+                    on_progress(20, "Audio concat failed, using single audio fallback")
+                per_seg_audio_durs = []
+            finally:
+                try:
+                    concat_list_p.unlink()
+                except Exception:
+                    pass
+
+    # --- Fallback: single full-text audio ---
+    if audio_path is None or not per_seg_audio_durs:
+        per_seg_audio_durs = []
+        if audio_path is None:
+            if use_sarvam and sarvam_available():
+                if on_progress:
+                    on_progress(20, "Sarvam AI voice (full)...")
+                audio_path = generate_speech_sarvam(
+                    full_text, config.OUTPUT_DIR / "temp_audio.wav", language, gender,
+                    voice=sarvam_voice,
+                )
+        if audio_path is None and use_elevenlabs and elevenlabs_available():
+            audio_path = generate_speech_elevenlabs(
+                full_text, config.OUTPUT_DIR / "temp_audio.mp3", language
+            )
+        if audio_path is None:
+            audio_path = generate_speech(script, voice, speed, language, gender, accent)
+        if audio_path is None:
+            audio_path = generate_speech_from_text(
+                full_text, voice, speed, language, gender, accent,
+            )
+        if audio_path is None or not audio_path.exists():
+            raise RuntimeError("Failed to generate audio")
+
+    total_audio_dur = _get_file_duration(audio_path) if audio_path else duration_minutes * 60.0
+
+    # --- Compute segment timings (actual or estimated) ---
+    if per_seg_audio_durs and len(per_seg_audio_durs) == len(segs):
+        seg_times = []
+        cum = 0.0
+        for d in per_seg_audio_durs:
+            seg_times.append({"start": cum, "end": cum + d})
+            cum += d
+    else:
+        total_chars = sum(len(s["text"]) for s in segs) if segs else 1
+        seg_times = []
+        cum = 0.0
+        for s in segs:
+            ratio = len(s["text"]) / total_chars if segs else 1.0
+            d = total_audio_dur * ratio
+            seg_times.append({"start": cum, "end": cum + d})
+            cum += d
+
+    def _gen_anchor_clip(lc_video_path, start_t, dur_s, out_p):
+        if not lc_video_path or not Path(lc_video_path).exists():
+            return None
+        trim_cmd = [
+            "ffmpeg", "-y",
+            "-i", str(lc_video_path),
+            "-ss", str(start_t),
+            "-t", str(max(dur_s, 1.0)),
+            "-c:v", "libx264", "-preset", "medium", "-crf", "16", "-profile:v", "high", "-level", "4.2",
+            "-pix_fmt", "yuv420p",
+            "-an",
+            str(out_p),
+        ]
+        try:
+            subprocess.run(trim_cmd, capture_output=True, check=True)
+            return str(out_p) if out_p.exists() else None
+        except Exception:
             return None
 
-        total_chars = sum(len(s["text"]) for s in segs)
-        cum_time = 0.0
-        seg_times = []
-        for s in segs:
-            ratio = len(s["text"]) / total_chars if total_chars else 1.0 / max(len(segs), 1)
-            dur = audio_dur * ratio
-            seg_times.append({"start": cum_time, "end": cum_time + dur})
-            cum_time += dur
-
+    def _stage_interleaved_edit(scenes_list, lc_video_path):
+        """Build broadcast edit: anchor (LongCat) ↔ broll (Kling) interleaved."""
+        if not segs:
+            return None
         scene_clips = []
-        scene_index = 0
+        half_dur = max(total_audio_dur / max(len(scenes_list) * 2, 1), 1.0)
 
         for i, sc in enumerate(scenes_list):
-            scene_index = min(i, len(seg_times) - 1)
-            st_info = seg_times[scene_index]
+            st_info = seg_times[min(i, len(seg_times) - 1)]
             seg_dur = st_info["end"] - st_info["start"]
 
             if sc.scene_type == "broll":
@@ -210,27 +295,20 @@ def run_full_pipeline(
                         scene_clips.append(up)
                     else:
                         scene_clips.append(result)
-            else:
-                if lc_video_path and Path(lc_video_path).exists():
-                    seg_p = config.OUTPUT_DIR / f"seg_anchor_{output_id}_{i}.mp4"
+                else:
                     if on_progress:
-                        on_progress(65, f"Editing anchor scene {i+1}/{len(scenes_list)}...")
-                    trim_cmd = [
-                        "ffmpeg", "-y",
-                        "-i", str(lc_video_path),
-                        "-ss", str(st_info["start"]),
-                        "-t", str(max(seg_dur, 1.0)),
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                        "-pix_fmt", "yuv420p",
-                        "-an",
-                        str(seg_p),
-                    ]
-                    try:
-                        subprocess.run(trim_cmd, capture_output=True, check=True)
-                        if seg_p.exists():
-                            scene_clips.append(str(seg_p))
-                    except Exception:
-                        pass
+                        on_progress(60, f"Kling failed, using anchor fallback for scene {i+1}")
+                    fallback_p = config.OUTPUT_DIR / f"seg_broll_fallback_{output_id}_{i}.mp4"
+                    fb = _gen_anchor_clip(lc_video_path, max(st_info["start"] - half_dur, 0), seg_dur, fallback_p)
+                    if fb:
+                        scene_clips.append(fb)
+            else:
+                seg_p = config.OUTPUT_DIR / f"seg_anchor_{output_id}_{i}.mp4"
+                if on_progress:
+                    on_progress(65, f"Editing anchor scene {i+1}/{len(scenes_list)}...")
+                clip = _gen_anchor_clip(lc_video_path, st_info["start"], seg_dur, seg_p)
+                if clip:
+                    scene_clips.append(clip)
 
         if len(scene_clips) < 1:
             return None
@@ -242,7 +320,7 @@ def run_full_pipeline(
         final_edit = stitch_with_transitions(
             scene_clips, str(stitched),
             transition_type="crossfade",
-            transition_frames=20,
+            transition_frames=30,
             fps=25,
             target_width=config.OUTPUT_WIDTH,
             target_height=config.OUTPUT_HEIGHT,
@@ -259,7 +337,7 @@ def run_full_pipeline(
             "-i", final_edit,
             "-i", str(audio_path),
             "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "256k",
+            "-c:a", "aac", "-b:a", "320k",
             "-map", "0:v", "-map", "1:a",
             "-shortest",
             str(audio_out),
@@ -295,15 +373,16 @@ def run_full_pipeline(
                 cinematic_style=cinematic_style,
                 user_visual_prompt=visual_prompt,
             )
-            audio_dur = _get_audio_duration_sec(audio_path)
-            interleaved = _stage_interleaved_edit(scenes, lc_path, audio_dur)
+            interleaved = _stage_interleaved_edit(scenes, lc_path)
             if interleaved and Path(interleaved).exists():
                 raw_video = Path(interleaved)
             else:
-                print("Interleaved edit failed, using raw LongCat video")
+                if on_progress:
+                    on_progress(80, "Interleaved edit failed, using raw LongCat video")
                 raw_video = lc_path
         else:
-            print("LongCat failed, falling back to Wav2Lip")
+            if on_progress:
+                on_progress(30, "LongCat failed, falling back to Wav2Lip")
             use_longcat_actual = False
 
     # === MODE 1b: LongCat + DiT combined (existing) ===
@@ -355,7 +434,8 @@ def run_full_pipeline(
             str(raw_video), duration_minutes, "auto", on_progress,
         )
         if not lc_result:
-            print("LongCat failed, falling back to Wav2Lip")
+            if on_progress:
+                on_progress(40, "LongCat failed, falling back to Wav2Lip")
             use_longcat_actual = False
 
     # === MODE 3: Wav2Lip (default fallback) ===
@@ -394,33 +474,47 @@ def run_full_pipeline(
 
     # === Studio Production ===
     if studio_production and raw_video.exists():
-        if on_progress:
-            on_progress(95, "Composing studio scene...")
-        headlines = [s["text"][:80] for s in script.get("segments", []) if s["text"]]
-        composer = _get_composer()
-        composed = composer.compose(
-            input_video=str(raw_video), output_path=str(final_video),
-            audio_path=str(audio_path),
-            anchor_name=anchor_name or script.get("title", "News")[:40],
-            channel_name=channel_name, show_name=show_name,
-            headlines=headlines, ticker_text="", theme=studio_theme,
-            enable_intro=enable_intro, enable_outro=True,
-            enable_ticker=enable_ticker, enable_lower_third=True,
-            music_path=music_path, pip_composite=use_longcat_actual,
-            on_progress=on_progress,
-        )
-        if composed:
-            raw_video.unlink(missing_ok=True)
-            cleanup_temp()
+        try:
             if on_progress:
+                on_progress(95, "Composing studio scene...")
+            headlines = [s["text"][:80] for s in script.get("segments", []) if s["text"]]
+            composer = _get_composer()
+            composed = composer.compose(
+                input_video=str(raw_video), output_path=str(final_video),
+                audio_path=str(audio_path),
+                anchor_name=anchor_name or script.get("title", "News")[:40],
+                channel_name=channel_name, show_name=show_name,
+                headlines=headlines, ticker_text="", theme=studio_theme,
+                enable_intro=enable_intro, enable_outro=True,
+                enable_ticker=enable_ticker, enable_lower_third=True,
+                music_path=music_path, pip_composite=use_longcat_actual,
+                on_progress=on_progress,
+            )
+            if composed:
+                raw_video.unlink(missing_ok=True)
+                cleanup_temp()
+                if on_progress:
+                    on_progress(100, "Done!")
+                return {"video_path": composed, "script": script, "title": script.get("title", "News Video")}
+        except Exception:
+            if on_progress:
+                on_progress(95, "Studio production failed, using raw video")
+                import shutil
+                shutil.move(str(raw_video), str(final_video))
+                cleanup_temp()
                 on_progress(100, "Done!")
-            return {"video_path": composed, "script": script, "title": script.get("title", "News Video")}
+                return {"video_path": str(final_video), "script": script, "title": script.get("title", "News Video")}
 
-    if raw_video != final_video:
-        import shutil
-        shutil.move(str(raw_video), str(final_video))
+    try:
+        if raw_video and raw_video.exists() and raw_video != final_video:
+            import shutil
+            shutil.move(str(raw_video), str(final_video))
+    except Exception:
+        if on_progress:
+            on_progress(100, "Cleanup: using raw output")
+        final_video = raw_video
 
     cleanup_temp()
     if on_progress:
         on_progress(100, "Done!")
-    return {"video_path": str(final_video), "script": script, "title": script.get("title", "News Video")}
+    return {"video_path": str(final_video) if final_video.exists() else "", "script": script, "title": script.get("title", "News Video")}

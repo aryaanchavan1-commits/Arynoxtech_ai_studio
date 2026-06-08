@@ -44,7 +44,7 @@ def generate_speech_sarvam(
     output_path: Path,
     language: str = "english",
     gender: str = "female",
-    sample_rate: int = 16000,
+    sample_rate: int = 48000,
     voice: str = None,
 ) -> Path | None:
     try:

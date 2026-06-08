@@ -390,7 +390,10 @@ with tab1:
                                 use_container_width=True)
                 except Exception as e:
                     progress_bar.progress(1.0)
-                    status_ph.error(f"Error: {e}")
+                    msg = str(e) if str(e) else "Unknown error during generation"
+                    status_ph.error(f"Generation failed: {msg}")
+                    if on_progress:
+                        on_progress(100, f"Failed: {msg}")
 
 with tab2:
     st.markdown("### Live News Fetch")
