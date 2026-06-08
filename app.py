@@ -6,9 +6,9 @@ import config
 from src.video_pipeline import run_full_pipeline
 
 for key in ["dit_ready", "use_dit", "use_generated_b_roll", "cinematic_style",
-             "image_loaded", "image_path", "selected_news", "visual_prompt", "use_kling"]:
+             "image_loaded", "image_path", "selected_news", "visual_prompt", "use_runway"]:
     if key not in st.session_state:
-        st.session_state[key] = False if key in ("dit_ready", "use_dit", "use_generated_b_roll", "image_loaded", "use_kling") else ""
+        st.session_state[key] = False if key in ("dit_ready", "use_dit", "use_generated_b_roll", "image_loaded", "use_runway") else ""
 
 st.set_page_config(page_title="Arynox AI Studio", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
@@ -199,45 +199,45 @@ with st.sidebar:
         st.session_state.use_generated_b_roll = False; st.session_state.cinematic_style = "evening"
         st.caption(f"DiT detection failed")
 
-    st.markdown("### Kling AI Video Engine")
+    st.markdown("### Runway ML Video Engine")
     try:
-        from src.kling_video import kling_available as kling_avail, kling_api_configured
-        if kling_avail():
-            use_kling = st.checkbox("Use Kling AI (Cinematic Scenes)", value=True,
-                help="Kling generates cinema-quality B-roll scenes from your script. Works with or without LongCat.")
-            st.caption("Kling API: connected")
-            if use_kling:
-                kling_model = st.selectbox("Kling Model",
-                    options=["kling-v3", "kling-v1"],
+        from src.runway_video import runway_available as runway_avail, runway_api_configured
+        if runway_avail():
+            use_runway = st.checkbox("Use Runway ML (Cinematic Scenes)", value=True,
+                help="Runway Gen-4 Turbo generates cinema-quality B-roll. Better than Kling, same or lower cost.")
+            st.caption("Runway API: connected")
+            if use_runway:
+                runway_model = st.selectbox("Runway Model",
+                    options=["gen4_turbo", "gen3a_turbo"],
                     format_func=lambda x: {
-                        "kling-v3": "Kling V3 (best quality)",
-                        "kling-v1": "Kling V1 (legacy)",
+                        "gen4_turbo": "Gen-4 Turbo (best value, $0.05/s)",
+                        "gen3a_turbo": "Gen-3a Turbo (fastest, $0.05/s)",
                     }[x], index=0)
-                os.environ["KLING_MODEL"] = kling_model
-                config.KLING_MODEL = kling_model
-                st.session_state.use_kling = True
+                os.environ["RUNWAY_MODEL"] = runway_model
+                config.RUNWAY_MODEL = runway_model
+                st.session_state.use_runway = True
             else:
-                st.session_state.use_kling = False
+                st.session_state.use_runway = False
         else:
-            use_kling = False
-            st.session_state.use_kling = False
-            st.info("Kling AI Video")
-            st.caption("Set KLING_ACCESS_KEY and KLING_SECRET_KEY in .env")
+            use_runway = False
+            st.session_state.use_runway = False
+            st.info("Runway ML Video")
+            st.caption("Set RUNWAY_API_KEY in .env")
     except Exception as e:
-        use_kling = False
-        st.session_state.use_kling = False
-        st.caption(f"Kling: not available ({e})")
+        use_runway = False
+        st.session_state.use_runway = False
+        st.caption(f"Runway: not available ({e})")
 
-    if st.session_state.get("use_kling", False) and use_longcat:
-        st.success("BROADCAST PRO: LongCat avatar + Kling cinematic scenes (interleaved edit with crossfades)")
+    if st.session_state.get("use_runway", False) and use_longcat:
+        st.success("BROADCAST PRO: LongCat avatar + Runway cinematic scenes (interleaved edit with crossfades)")
     elif st.session_state.get("use_dit", False) and use_longcat:
         st.success("Combined Mode: LongCat + DiT scenes")
     elif st.session_state.get("use_dit", False):
         st.info("DiT generates full video scenes")
     elif use_longcat:
         st.info("LongCat generates full avatar video")
-    elif st.session_state.get("use_kling", False):
-        st.info("Kling generates cinematic broadcast scenes")
+    elif st.session_state.get("use_runway", False):
+        st.info("Runway generates cinematic broadcast scenes")
 
     if st.session_state.get("use_dit", False):
         with st.expander("DiT Advanced Settings", expanded=False):
@@ -398,7 +398,7 @@ with tab1:
                         use_sarvam=use_sarvam, sarvam_voice=sarvam_voice_selected,
                         use_longcat=use_longcat,
                         use_dit=st.session_state.get("use_dit", False),
-                        use_kling=st.session_state.get("use_kling", False),
+                        use_runway=st.session_state.get("use_runway", False),
                         on_progress=on_progress, studio_production=studio_production,
                         anchor_name=anchor_name, channel_name=channel_name,
                         show_name=show_name, studio_theme=studio_theme,
@@ -450,11 +450,11 @@ with tab2:
 
 with tab3:
     st.markdown("""
-    **Pipeline (Production Mode - LongCat + Kling):**
-    1. **Script** - Groq AI generates Marathi news script from topic
-    2. **Voice** - Sarvam AI Bulbul v3 (sumit/ishita) generates natural Marathi voiceover
+    **Pipeline (Production Mode - LongCat + Runway):**
+    1. **Script** - Groq AI generates news script from topic
+    2. **Voice** - Sarvam AI Bulbul v3 generates natural voiceover
     3. **Avatar** - LongCat creates full-body talking anchor with lip-sync from audio
-    4. **B-roll** - Kling AI generates cinematic scene clips matching each story segment
+    4. **B-roll** - Runway Gen-4 Turbo generates cinematic scene clips matching each story segment
     5. **Edit** - Anchor segments + B-roll clips interleaved with crossfade transitions (broadcast style)
     6. **Quality** - Multi-pass post-processing: denoise, sharpen, face enhance, 4K upscale, 60fps interpolation
     7. **Studio** - Intro/outro, ticker, lower thirds, branded overlays added
@@ -465,7 +465,7 @@ with tab3:
     - **Premium** - CRF 16, 30fps, face enhance, 1080p - $3-5/video
     - **Cinema** - CRF 14, 60fps, 4K, face enhance, denoise + sharpen - $5-8/video
 
-    **Fallback modes:** Wav2Lip (any GPU) + Kling, or Wav2Lip standalone on RTX 3050
+    **Fallback modes:** Wav2Lip (any GPU) + Runway, or Wav2Lip standalone on RTX 3050
 
-    **Tips:** LongCat needs 16GB+ VRAM. On RTX 3050, use Wav2Lip + Kling for cinematic B-roll with talking head.
+    **Tips:** LongCat needs 16GB+ VRAM. On RTX 3050, use Wav2Lip + Runway for cinematic B-roll with talking head.
     """)

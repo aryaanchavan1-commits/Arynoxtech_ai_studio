@@ -14,7 +14,7 @@ from src.sarvam_tts import generate_speech_sarvam, sarvam_available
 from src.character_compositor import prepare_character_scene
 from src.motion_enhancer import enhance_video as enhance_motion_video
 from src.dit_pipeline import run_dit_pipeline, dit_available
-from src.kling_video import kling_available, run_kling_scene_generation, generate_scene_video, reset_kling_spend
+from src.runway_video import runway_available, run_runway_scene_generation, generate_scene_video, reset_runway_spend
 from src.video_enhancer import VideoUpscaler, ColorGrader, combine_with_color_correction, FaceEnhancer, FrameInterpolator, SuperResUpscaler
 from src.scene_transition import stitch_with_transitions
 from src.scene_director import plan_scenes
@@ -77,7 +77,7 @@ def run_full_pipeline(
     use_sarvam: bool = True,
     sarvam_voice: str = None,
     use_dit: bool = False,
-    use_kling: bool = False,
+    use_runway: bool = False,
     on_progress=None,
     studio_production: bool = False,
     anchor_name: str = "",
@@ -95,10 +95,10 @@ def run_full_pipeline(
 ) -> dict:
     use_dit_actual = use_dit and dit_available()
     use_longcat_actual = use_longcat and longcat_available()
-    use_kling_actual = use_kling and kling_available()
-    reset_kling_spend()
+    use_runway_actual = use_runway and runway_available()
+    reset_runway_spend()
 
-    if use_dit_actual and not use_longcat_actual and not use_kling_actual:
+    if use_dit_actual and not use_longcat_actual and not use_runway_actual:
         return run_dit_pipeline(
             character_image_path=character_image_path, topic=topic,
             manual_text=manual_text, news_style=news_style,
@@ -265,7 +265,7 @@ def run_full_pipeline(
             return None
 
     def _stage_interleaved_edit(scenes_list, lc_video_path):
-        """Build broadcast edit: anchor (LongCat) ↔ broll (Kling) interleaved."""
+        """Build broadcast edit: anchor (LongCat) ↔ broll (Runway) interleaved."""
         if not segs:
             return None
         scene_clips = []
@@ -277,7 +277,7 @@ def run_full_pipeline(
 
             if sc.scene_type == "broll":
                 if on_progress:
-                    on_progress(60, f"Kling: B-roll scene {i+1}/{len(scenes_list)}...")
+                    on_progress(60, f"Runway: B-roll scene {i+1}/{len(scenes_list)}...")
                 clip_p = config.OUTPUT_DIR / f"seg_broll_{output_id}_{i}.mp4"
                 result = generate_scene_video(
                     prompt=sc.prompt,
@@ -298,7 +298,7 @@ def run_full_pipeline(
                         scene_clips.append(result)
                 else:
                     if on_progress:
-                        on_progress(60, f"Kling failed, using anchor fallback for scene {i+1}")
+                        on_progress(60, f"Runway failed, using anchor fallback for scene {i+1}")
                     fallback_p = config.OUTPUT_DIR / f"seg_broll_fallback_{output_id}_{i}.mp4"
                     fb = _gen_anchor_clip(lc_video_path, max(st_info["start"] - half_dur, 0), seg_dur, fallback_p)
                     if fb:
@@ -354,8 +354,8 @@ def run_full_pipeline(
                 return final_edit
             return None
 
-    # === MODE 1: LongCat + Kling (professional broadcast edit) ===
-    if use_longcat_actual and use_kling_actual:
+    # === MODE 1: LongCat + Runway (professional broadcast edit) ===
+    if use_longcat_actual and use_runway_actual:
         if on_progress:
             on_progress(30, "LongCat: generating avatar video...")
         lc_video = generate_longcat_video(
