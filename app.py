@@ -322,6 +322,8 @@ with tab1:
             topic = ""; news_style = "neutral"; use_ai = False
 
         st.markdown("### Visual Style")
+        use_nlp = st.checkbox("NLP Amplifier (auto-enhance prompts)", value=True,
+            help="Uses AI to turn brief descriptions into cinematic production-quality prompts. Better images, less API spending.")
         vis_prompt = st.text_area("Scene description (optional)", height=80,
             placeholder="e.g. A sleek modern studio with blue lighting, or a tropical beach background...",
             key="visual_prompt_input",
@@ -360,6 +362,18 @@ with tab1:
 
                 try:
                     sarvam_voice_selected = sarvam_voice if sarvam_voice and sarvam_voice != "auto" else None
+                    use_nlp_val = use_nlp and bool(api_key or config.GROQ_API_KEY)
+                    nlp_style = st.session_state.get("cinematic_style", "evening")
+                    if use_nlp_val and vis_prompt:
+                        try:
+                            from src.nlp_amplifier import amplify_prompt
+                            enhanced = amplify_prompt(vis_prompt, "cinematic" if nlp_style != "breaking" else "dramatic")
+                            if enhanced and enhanced != vis_prompt:
+                                st.session_state.visual_prompt = enhanced
+                                if on_progress:
+                                    on_progress(1, f"NLP: prompt enhanced ({len(vis_prompt)}→{len(enhanced)} chars)")
+                        except Exception:
+                            pass
                     result = run_full_pipeline(
                         character_image_path=st.session_state.image_path,
                         topic=topic, manual_text=manual_text, news_style=news_style,

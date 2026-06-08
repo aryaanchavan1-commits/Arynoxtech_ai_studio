@@ -2,6 +2,11 @@
 
 Turn any portrait photo into a **professional Marathi/English news anchor**. Full broadcast pipeline: AI script → Sarvam AI Marathi voice → LongCat talking avatar + Kling AI cinematic B-roll → interleaved broadcast edit with crossfades → studio production overlays.
 
+**New in v3.0:**
+- **NLP Amplifier** — Automatically enhances brief user prompts into cinematic production-quality descriptions. Better first-generation results = fewer retries = lower API spend. Turn "a man speaking about tech" into "cinematic neon-lit tech studio with volumetric lighting..."
+- **NLP Amplifier toggle** in Scene Description — enable/disable AI prompt enhancement per session
+- **`download_wav2lip.py`** — Standalone script to download the Wav2Lip GAN model with progress bars and 6 fallback mirrors
+
 **New in v2.0:** Professional interleaved broadcast editing — anchor speaks, then cuts to cinematic B-roll, then back to anchor — like a real news channel. Kling AI generates 5-10s clips from scene-matched prompts. Sarvam AI Bulbul v3 with explicit voice selection (sumit/ishita/amit/priya).
 
 **Use cases:** Marathi news broadcasts, daily news shows, corporate announcements, educational content, social media videos.
@@ -16,6 +21,7 @@ Imagine you have a photo of yourself. This software makes that photo come alive 
 
 - Write a Marathi/English news script automatically from any topic (or use your own text)
 - Generate a natural Marathi voiceover using Sarvam AI Bulbul v3 (voices: sumit, ishita, amit, priya, plus auto)
+- **NLP Amplifier** — Auto-enhances your scene descriptions into cinematic production-quality prompts using Groq AI. Better prompts = better outputs = less API spend
 - Make the photo speak with perfectly synced lip movements via LongCat full-body avatar (16GB+ GPU) or Wav2Lip (any GPU)
 - Generate cinematic B-roll clips using **Kling AI** API — scene-matched visuals for each news segment
 - **Interleave anchor segments with B-roll clips** in a professional broadcast edit with crossfade transitions
@@ -59,7 +65,7 @@ The system auto-detects your GPU and enables only what your hardware can handle.
 ### Speech & Language
 | Model | Purpose | Source |
 |-------|---------|--------|
-| **Llama 3.3 70B** (via Groq API) | News script generation | groq.com |
+| **Llama 3.3 70B** (via Groq API) | News script generation, **NLP prompt amplification** | groq.com |
 | **Edge-TTS** | Neural text-to-speech (75+ voices, 50+ languages) | Microsoft (local) |
 | **Sarvam AI** | Indian-accented TTS (Hindi, Marathi, Tamil, etc.) | sarvam.ai |
 | **ElevenLabs** | Premium voice cloning & TTS | elevenlabs.io |
@@ -74,9 +80,13 @@ The system auto-detects your GPU and enables only what your hardware can handle.
 | **Kling + LongCat** | Interleaved anchor (LongCat) ↔ B-roll (Kling) broadcast edit | Production mode (16GB+ GPU) |
 | **Kling + Wav2Lip** | Talking head (Wav2Lip) + Kling B-roll interleaved | Fallback production (any GPU) |
 
-### Computer Vision & Processing
+### NLP & Prompt Engineering
 | Algorithm | Purpose | Implementation |
 |-----------|---------|----------------|
+| **NLP Amplifier** | Expands brief user prompts into cinematic production-quality descriptions using Groq LLM | Custom (src/nlp_amplifier.py) |
+| **Cinematic Terminology Injection** | Adds professional cinematography terms (lighting, camera, mood) for better AI generation | Custom (src/nlp_amplifier.py) |
+
+### Computer Vision & Processing
 | **Haar Cascade** | Face detection | OpenCV (built-in) |
 | **OpenCV FaceMesh** | Facial landmark detection | MediaPipe |
 | **Lanczos Interpolation** | Video upscaling to 1080p | OpenCV `INTER_LANCZOS4` |
@@ -104,6 +114,8 @@ Arynox-AI-Studio/
   requirements.txt        Python dependencies
   setup.bat               One-click Windows setup
   setup_new_pc.py         Python setup script
+  download_longcat.py     Downloads LongCat AI avatar model (27GB)
+  download_wav2lip.py     Downloads Wav2Lip GAN model (~150MB) with 6 fallback mirrors
   .env                    API keys (you edit this)
   .gitignore              Files to exclude from git
 
@@ -112,6 +124,7 @@ Arynox-AI-Studio/
     lip_sync.py           Wav2Lip engine wrapper
     motion_enhancer.py    Head movement, blinking, breathing
     news_script.py        AI news script generation (Groq)
+    nlp_amplifier.py      NLP Amplifier — enhances prompts into cinematic quality
     text_to_speech.py     Edge-TTS voice generation
     sarvam_tts.py         Sarvam AI TTS integration (voice override)
     elevenlabs_tts.py     ElevenLabs TTS integration
@@ -227,18 +240,21 @@ venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Download Wav2Lip model
-python -c "
-from huggingface_hub import snapshot_download
-import requests
-url = 'https://huggingface.co/Nekochu/Wav2Lip/resolve/main/wav2lip_gan.pth'
-resp = requests.get(url, stream=True, timeout=120)
-resp.raise_for_status()
-with open('models/wav2lip_gan.pth', 'wb') as f:
-    for chunk in resp.iter_content(8192):
-        f.write(chunk)
-print('Wav2Lip model downloaded')
-"
+# Download Wav2Lip model (uses download_wav2lip.py with 6 fallback mirrors)
+python download_wav2lip.py
+
+# Or manually:
+# python -c "
+# from huggingface_hub import snapshot_download
+# import requests
+# url = 'https://huggingface.co/Nekochu/Wav2Lip/resolve/main/wav2lip_gan.pth'
+# resp = requests.get(url, stream=True, timeout=120)
+# resp.raise_for_status()
+# with open('models/wav2lip_gan.pth', 'wb') as f:
+#     for chunk in resp.iter_content(8192):
+#         f.write(chunk)
+# print('Wav2Lip model downloaded')
+# "
 
 # Edit .env with your API keys
 notepad .env
@@ -329,6 +345,20 @@ You can describe exactly what the video background should look like:
 | `"Futuristic cyberpunk city with neon lights"` | Neon cityscape |
 | `"Elegant corporate boardroom"` | Professional office setting |
 | `"Cozy living room with fireplace"` | Warm indoor setting |
+
+### NLP Amplifier (Prompt Enhancement)
+
+The **NLP Amplifier** uses Groq AI (Llama 3.3 70B) to automatically transform your brief scene descriptions into rich, cinematic production-quality prompts:
+
+| You Type | NLP Amplifier Produces |
+|----------|----------------------|
+| `"tech studio"` | `"Futuristic technology visualization, advanced AI neural network animation, glowing digital circuits, blue and purple neon cinematic lighting, holographic interfaces, smooth camera dolly movement, 8K tech documentary quality"` |
+| `"beach sunset"` | `"Tropical beach scene at golden hour, warm amber sunlight reflecting on gentle waves, cinematic wide shot, soft bokeh in foreground, dramatic cloud formations, professional travel documentary quality"` |
+| `"corporate boardroom"` | `"Elegant corporate boardroom with floor-to-ceiling windows, modern minimalist design, soft natural lighting through blinds, mahogany conference table, professional business atmosphere, cinematic shallow depth of field"` |
+
+**How it reduces API spending:** Better prompts mean AI generators (Kling, DiT) produce usable results on the **first attempt**, eliminating costly retries. Each Kling generation costs ~$0.35 — one retry saved per scene can cut costs by 30-50%.
+
+**To enable/disable:** Toggle "NLP Amplifier" checkbox in the scene description section of the sidebar.
 
 ### Tips for Best Results
 
