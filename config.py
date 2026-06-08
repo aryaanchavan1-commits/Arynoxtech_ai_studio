@@ -80,9 +80,12 @@ FRAME_INTERPOLATION_TARGET = int(os.getenv("FRAME_INTERPOLATION_TARGET", "60"))
 LONGCAT_REPO_DIR = MODELS_DIR / "LongCat-Video"
 LONGCAT_WEIGHTS_DIR = MODELS_DIR / "LongCat-Video-Avatar-1.5"
 
-# Runway ML Video API (replaces Kling — better quality, same/lower cost)
-RUNWAY_API_KEY = os.getenv("RUNWAY_API_KEY", "")
-RUNWAY_MODEL = os.getenv("RUNWAY_MODEL", "gen4_turbo")
+# Kling AI Video API
+KLING_ACCESS_KEY = os.getenv("KLING_ACCESS_KEY", "")
+KLING_SECRET_KEY = os.getenv("KLING_SECRET_KEY", "")
+KLING_MODEL = os.getenv("KLING_MODEL", "kling-v3")
+KLING_ENABLE = os.getenv("KLING_ENABLE", "auto")
+KLING_EXTEND_IMAGE = os.getenv("KLING_EXTEND_IMAGE", "")
 
 # Video settings
 OUTPUT_FPS = int(os.getenv("OUTPUT_FPS", "60"))

@@ -55,11 +55,11 @@ Imagine you have a photo of yourself. This software makes that photo come alive 
 ### What Requires a Better GPU (RTX 4080/4090 with 16GB+ VRAM)
 - DiT AI video generation (CogVideoX) — needs 12GB+ VRAM
 - LongCat avatar animation — needs 16GB+ VRAM
-- **LongCat + Runway Broadcast Production mode** — full interleaved anchor/B-roll edit
+- **LongCat + Kling Broadcast Production mode** — full interleaved anchor/B-roll edit
 
 ### API Requirements
 
-* **Runway ML** — requires API key at runwayml.com (~$0.05/second for gen4_turbo)
+* **Kling AI** — requires API credits at app.klingai.com (\~\$0.35/generation for v2.5 Turbo)
 - **Sarvam AI** — free tier available for Indian TTS
 - **Groq** — free tier for AI script generation
 
@@ -135,7 +135,7 @@ Arynox-AI-Studio/
     elevenlabs_tts.py     ElevenLabs TTS integration
     longcat_video.py      LongCat avatar setup & generation
     longcat_chat.py       LongCat Chat API for scripts
-    runway_video.py       Runway Gen-4 Turbo client (REST API, text2video, image2video)
+    kling_video.py        Kling AI client (JWT auth, text2video, image2video, polling)
     dit_video.py          DiT (CogVideoX) video engine
     dit_pipeline.py       DiT end-to-end pipeline
     scene_director.py     Converts scripts to anchor/broll scenes with topic-matched prompts
@@ -209,11 +209,11 @@ GROQ_API_KEY=gsk_your_groq_api_key_here
 SARVAM_API_KEY=your_sarvam_api_key_here
 SARVAM_VOICE=sumit
 
-# === OPTIONAL: Runway ML (cinematic B-roll video scenes — replaces Kling) ===
-# Get key at https://runwayml.com
-# gen4_turbo costs $0.05/s — cheaper and better than Kling v3
-RUNWAY_API_KEY=your_runway_api_key_here
-RUNWAY_MODEL=gen4_turbo
+# === OPTIONAL: Kling AI (cinematic B-roll video scenes) ===
+# Get keys at https://app.klingai.com
+KLING_ACCESS_KEY=your_kling_access_key_here
+KLING_SECRET_KEY=your_kling_secret_key_here
+KLING_MODEL=kling-v2-5-turbo
 
 # === OPTIONAL: ElevenLabs (premium English TTS) ===
 # ELEVENLABS_API_KEY=your_key_here
@@ -391,8 +391,9 @@ All settings are in `config.py` or overrideable via `.env`:
 | `SARVAM_VOICE` | auto | Default Sarvam voice: `sumit`, `ishita`, `amit`, `priya`, `meera`, `vijay`, `kavya`, `arjun`, `auto` |
 | `NEWSAPI_KEY` | — | API key for live news fetch (optional) |
 | `ELEVENLABS_API_KEY` | — | API key for premium TTS (optional) |
-| `RUNWAY_API_KEY` | — | Runway ML API key (runwayml.com) — replaces Kling |
-| `RUNWAY_MODEL` | gen4_turbo | Model: `gen4_turbo` ($0.05/s), `gen3a_turbo` ($0.05/s) |
+| `KLING_ACCESS_KEY` | — | Kling AI API access key (app.klingai.com) |
+| `KLING_SECRET_KEY` | — | Kling AI API secret key |
+| `KLING_MODEL` | kling-v3 | Model: `kling-v1`, `kling-v2-5-turbo`, `kling-v3` |
 | `DEVICE` | auto | `auto`, `cuda`, or `cpu` |
 | `LANGUAGE` | english | `english`, `hindi`, `marathi`, `tamil`, `telugu`, `kannada`, `malayalam`, `bengali`, `gujarati`, `punjabi`, `odia` |
 | `OUTPUT_RESOLUTION` | 1920x1080 | Final video resolution |
@@ -423,22 +424,23 @@ LongCat requires an NVIDIA GPU with 16GB+ VRAM. When you enable it in the sideba
 
 You can also click "Download LongCat AI (27GB)" in the sidebar to pre-download.
 
-## Advanced: Setting Up Runway ML
+## Advanced: Setting Up Kling AI
 
-Runway ML is an API-based service — no GPU needed. You need an API key on your Runway account:
+Kling AI is an API-based service — no GPU needed. You need credits on your Kling account:
 
-1. Go to https://runwayml.com and sign up
-2. Navigate to Settings → API and create an API key
-3. Add credits to your account (starts at \~\$15)
-4. Add the key to your `.env` file:
+1. Go to https://app.klingai.com and sign up
+2. Navigate to API management and create an access key/secret key pair
+3. Add credits to your account (starts at \~\$10)
+4. Add the keys to your `.env` file:
    ```
-RUNWAY_API_KEY=your_runway_api_key_here
-RUNWAY_MODEL=gen4_turbo
+KLING_ACCESS_KEY=your_access_key_here
+KLING_SECRET_KEY=your_secret_key_here
+KLING_MODEL=kling-v3
    ```
 
-**Pricing:** Gen-4 Turbo = \~$0.05/second ($0.25 per 5s clip). Cheaper than Kling v3 ($0.84) with better quality that approaches Veo 3.
+**Pricing:** Kling v2.5 Turbo = \~$0.35/generation (5-10s clip), v3 = ~$0.84/generation. For a 2-minute news video with \~6 B-roll clips, expect \~\$2-5 per video total.
 
-**Available models:** `gen4_turbo` (best value), `gen3a_turbo` (fastest).
+**Available models:** `kling-v1` ($0.20), `kling-v2-5-turbo` ($0.35, best value), `kling-v3` (\$0.84, latest quality).
 
 ## Troubleshooting
 
@@ -465,14 +467,20 @@ echo DEVICE=cpu >> .env
 * The download is \~27GB and will take 15-30 minutes
 - Check that CUDA toolkit is installed: `nvidia-smi`
 
-### "Runway API: Insufficient balance"
-- Go to https://runwayml.com and purchase credits
-- Gen-4 Turbo costs \~$0.05/second ($0.25 per 5s clip)
+### "Kling API: Account balance not enough"
+- Go to https://app.klingai.com and purchase credits
+* Kling v2.5 Turbo costs \~\$0.35 per generation (5-10s clip)
 - Add credits and retry
 
-### "Runway generation failed" / "Invalid model name"
-- Check that `RUNWAY_API_KEY` is set in `.env`
-- Valid models: `gen4_turbo`, `gen3a_turbo`
+### "Kling generation failed" / "Invalid model name"
+- Check that `KLING_ACCESS_KEY` and `KLING_SECRET_KEY` are set in `.env`
+- Valid models: `kling-v1`, `kling-v2-5-turbo`, `kling-v3`
+- Invalid models (will fail): `kling-v2`, `kling-v2.6-pro`
+- API mode uses `"std"` not `"standard"`
+
+### "PyJWT import error"
+- Install: `pip install PyJWT>=2.8.0`
+- Required for Kling API authentication (JWT token generation)
 
 ## License
 
