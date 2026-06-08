@@ -15,7 +15,7 @@ from src.character_compositor import prepare_character_scene
 from src.motion_enhancer import enhance_video as enhance_motion_video
 from src.dit_pipeline import run_dit_pipeline, dit_available
 from src.kling_video import kling_available, run_kling_scene_generation, generate_scene_video, reset_kling_spend
-from src.video_enhancer import VideoUpscaler, ColorGrader, combine_with_color_correction
+from src.video_enhancer import VideoUpscaler, ColorGrader, combine_with_color_correction, FaceEnhancer, FrameInterpolator, SuperResUpscaler
 from src.scene_transition import stitch_with_transitions
 from src.scene_director import plan_scenes
 
@@ -91,6 +91,7 @@ def run_full_pipeline(
     use_generated_b_roll: bool = True,
     cinematic_style: str = "evening",
     visual_prompt: str = "",
+    quality_preset: str = None,
 ) -> dict:
     use_dit_actual = use_dit and dit_available()
     use_longcat_actual = use_longcat and longcat_available()
@@ -471,6 +472,29 @@ def run_full_pipeline(
             if enhanced:
                 raw_video.unlink(missing_ok=True)
                 raw_video = Path(enhanced)
+
+    # === Quality Post-Processing ===
+    if raw_video and raw_video.exists() and quality_preset and quality_preset != "none":
+        try:
+            if on_progress:
+                on_progress(97, f"Quality post-processing: {quality_preset}...")
+            from src.video_quality import QualityPipeline
+            qp = QualityPipeline(config.OUTPUT_WIDTH, config.OUTPUT_HEIGHT)
+            enhanced = config.OUTPUT_DIR / f"quality_{output_id}.mp4"
+            result = qp.run(
+                str(raw_video), str(enhanced),
+                preset=quality_preset,
+                audio_path=str(audio_path) if audio_path else None,
+                on_progress=on_progress,
+            )
+            if result:
+                raw_video.unlink(missing_ok=True)
+                raw_video = Path(result)
+            if on_progress:
+                on_progress(98, "Quality processing complete")
+        except Exception:
+            if on_progress:
+                on_progress(97, "Quality post-processing skipped")
 
     # === Studio Production ===
     if studio_production and raw_video.exists():

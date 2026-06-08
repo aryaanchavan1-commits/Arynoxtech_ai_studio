@@ -252,6 +252,21 @@ with st.sidebar:
                 format_func=lambda x: {"crossfade":"Crossfade","fadeblack":"Fade to Black",
                     "slideleft":"Slide Left","slideright":"Slide Right"}[x], index=0)
 
+    st.markdown("### Quality Preset")
+    quality_preset = st.selectbox("Output Quality",
+        options=["cinema", "premium", "standard"],
+        format_func=lambda x: {
+            "standard": "Standard — fast, good quality, $2-3/video",
+            "premium": "Premium — high quality, face enhance, 30fps, $3-5/video",
+            "cinema": "Cinema — 60fps, 4K upscale, face enhance, denoise, $5-8/video",
+        }[x], index=0,
+        help="Higher presets apply multi-pass post-processing: denoise, sharpen, face enhancement, upscale, frame interpolation.")
+    st.caption({
+        "standard": "CRF 18, 25fps, 1080p",
+        "premium": "CRF 16, 30fps, face enhance, 1080p",
+        "cinema": "CRF 14, 60fps, 4K, face enhance, denoise + sharpen",
+    }[quality_preset])
+
     st.markdown("### Studio Production")
     studio_production = st.checkbox("Enable Studio Overlay", value=True)
     if studio_production:
@@ -392,6 +407,7 @@ with tab1:
                         use_generated_b_roll=st.session_state.get("use_generated_b_roll", True),
                         cinematic_style=st.session_state.get("cinematic_style", "evening"),
                         visual_prompt=st.session_state.get("visual_prompt", ""),
+                        quality_preset=quality_preset,
                     )
                     progress_bar.progress(1.0, text="Complete!")
                     status_ph.success(f"Video generated: {result['title']}")
@@ -440,8 +456,14 @@ with tab3:
     3. **Avatar** - LongCat creates full-body talking anchor with lip-sync from audio
     4. **B-roll** - Kling AI generates cinematic scene clips matching each story segment
     5. **Edit** - Anchor segments + B-roll clips interleaved with crossfade transitions (broadcast style)
-    6. **Studio** - Intro/outro, ticker, lower thirds, branded overlays added
-    7. **Master** - 1080p encode with AAC 256kbps audio, color graded
+    6. **Quality** - Multi-pass post-processing: denoise, sharpen, face enhance, 4K upscale, 60fps interpolation
+    7. **Studio** - Intro/outro, ticker, lower thirds, branded overlays added
+    8. **Master** - CRF 14 veryslow encode with AAC 320kbps audio, 3840x2160 output
+
+    **Quality Presets:**
+    - **Standard** - CRF 18, 25fps, 1080p - $2-3/video
+    - **Premium** - CRF 16, 30fps, face enhance, 1080p - $3-5/video
+    - **Cinema** - CRF 14, 60fps, 4K, face enhance, denoise + sharpen - $5-8/video
 
     **Fallback modes:** Wav2Lip (any GPU) + Kling, or Wav2Lip standalone on RTX 3050
 

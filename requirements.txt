@@ -30,3 +30,8 @@ safetensors>=0.4.0
 
 # Kling AI Video API
 PyJWT>=2.8.0
+
+# Video Quality Enhancement
+gfpgan>=1.3.8
+real-esrgan>=0.3.0
+basicsr>=1.4.2

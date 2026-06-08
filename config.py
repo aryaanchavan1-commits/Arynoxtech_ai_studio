@@ -56,18 +56,25 @@ DIT_USE_GENERATED_B_ROLL = os.getenv("DIT_USE_GENERATED_B_ROLL", "true") == "tru
 
 # Video Enhancement
 VIDEO_UPSCALE = os.getenv("VIDEO_UPSCALE", "true") == "true"
-VIDEO_UPSCALE_TARGET = os.getenv("VIDEO_UPSCALE_TARGET", "1920x1080")
+VIDEO_UPSCALE_TARGET = os.getenv("VIDEO_UPSCALE_TARGET", "3840x2160")
 VIDEO_ENABLE_COLOR_GRADE = os.getenv("VIDEO_ENABLE_COLOR_GRADE", "true") == "true"
 VIDEO_ENABLE_TRANSITIONS = os.getenv("VIDEO_ENABLE_TRANSITIONS", "crossfade")
 VIDEO_TRANSITION_FRAMES = int(os.getenv("VIDEO_TRANSITION_FRAMES", "30"))
-VIDEO_CRF = int(os.getenv("VIDEO_CRF", "16"))
-VIDEO_PRESET = os.getenv("VIDEO_PRESET", "slow")
-VIDEO_AUDIO_BITRATE = os.getenv("VIDEO_AUDIO_BITRATE", "256k")
+VIDEO_CRF = int(os.getenv("VIDEO_CRF", "14"))
+VIDEO_PRESET = os.getenv("VIDEO_PRESET", "veryslow")
+VIDEO_AUDIO_BITRATE = os.getenv("VIDEO_AUDIO_BITRATE", "320k")
 VIDEO_ENABLE_DENOISE = os.getenv("VIDEO_ENABLE_DENOISE", "true") == "true"
 VIDEO_ENABLE_SHARPEN = os.getenv("VIDEO_ENABLE_SHARPEN", "true") == "true"
 VIDEO_ENABLE_GAMMA_CORRECTION = os.getenv("VIDEO_ENABLE_GAMMA_CORRECTION", "true") == "true"
 VIDEO_GAMMA = float(os.getenv("VIDEO_GAMMA", "1.0"))
 CINEMATIC_STYLE = os.getenv("CINEMATIC_STYLE", "evening")
+
+# Quality Presets
+QUALITY_PRESET = os.getenv("QUALITY_PRESET", "cinema")
+ENABLE_FACE_ENHANCE = os.getenv("ENABLE_FACE_ENHANCE", "true") == "true"
+ENABLE_FRAME_INTERPOLATION = os.getenv("ENABLE_FRAME_INTERPOLATION", "true") == "true"
+ENABLE_SUPER_RES = os.getenv("ENABLE_SUPER_RES", "false") == "true"
+FRAME_INTERPOLATION_TARGET = int(os.getenv("FRAME_INTERPOLATION_TARGET", "60"))
 
 # LongCat-Video (local GPU inference)
 LONGCAT_REPO_DIR = MODELS_DIR / "LongCat-Video"
@@ -81,8 +88,8 @@ KLING_ENABLE = os.getenv("KLING_ENABLE", "auto")
 KLING_EXTEND_IMAGE = os.getenv("KLING_EXTEND_IMAGE", "")
 
 # Video settings
-OUTPUT_FPS = int(os.getenv("OUTPUT_FPS", "25"))
-OUTPUT_WIDTH, OUTPUT_HEIGHT = map(int, os.getenv("OUTPUT_RESOLUTION", "1920x1080").split("x"))
+OUTPUT_FPS = int(os.getenv("OUTPUT_FPS", "60"))
+OUTPUT_WIDTH, OUTPUT_HEIGHT = map(int, os.getenv("OUTPUT_RESOLUTION", "3840x2160").split("x"))
 
 # Language
 LANGUAGE = os.getenv("LANGUAGE", "english")

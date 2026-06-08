@@ -5,6 +5,91 @@ import subprocess
 import config
 
 
+class FaceEnhancer:
+    @staticmethod
+    def detect_and_enhance(frame: np.ndarray) -> np.ndarray:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = cascade.detectMultiScale(gray, 1.1, 4)
+        result = frame.copy()
+        for (fx, fy, fw, fh) in faces:
+            margin = int(fw * 0.25)
+            x1 = max(0, fx - margin)
+            y1 = max(0, fy - margin)
+            x2 = min(frame.shape[1], fx + fw + margin)
+            y2 = min(frame.shape[0], fy + fh + margin)
+            face_roi = result[y1:y2, x1:x2]
+            if face_roi.size > 0:
+                enhanced = cv2.detailEnhance(face_roi, sigma_s=10, sigma_r=0.15)
+                enhanced = cv2.edgePreservingFilter(enhanced, flags=1, sigma_s=60, sigma_r=0.4)
+                result[y1:y2, x1:x2] = enhanced
+        return result
+
+    @staticmethod
+    def enhance_video(input_path: str, output_path: str, on_progress=None) -> str | None:
+        import subprocess
+        cap = cv2.VideoCapture(input_path)
+        if not cap.isOpened():
+            return None
+        fps = int(cap.get(cv2.CAP_PROP_FPS)) or 25
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        tmp = Path(output_path).with_suffix(".tmp.mp4")
+        writer = cv2.VideoWriter(str(tmp), fourcc, fps, (w, h))
+        for i in range(total):
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = FaceEnhancer.detect_and_enhance(frame)
+            writer.write(frame)
+            if on_progress and i % 30 == 0:
+                on_progress(int(95 * i / total), f"Face enhance: frame {i}/{total}")
+        cap.release()
+        writer.release()
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(tmp),
+            "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+            "-pix_fmt", "yuv420p",
+            str(output_path),
+        ]
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+            tmp.unlink(missing_ok=True)
+            return str(output_path) if Path(output_path).exists() else None
+        except Exception:
+            if tmp.exists():
+                tmp.replace(output_path)
+            return str(output_path) if Path(output_path).exists() else None
+
+
+class SuperResUpscaler:
+    @staticmethod
+    def upscale_4x(frame: np.ndarray) -> np.ndarray:
+        h, w = frame.shape[:2]
+        return cv2.resize(frame, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+
+    @staticmethod
+    def upscale_video_ffmpeg(input_path: str, output_path: str, target_width: int = 3840, target_height: int = 2160) -> str | None:
+        import subprocess
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-vf", f"scale={target_width}:{target_height}:flags=lanczos",
+            "-c:v", "libx264", "-preset", "veryslow", "-crf", "14",
+            "-c:a", "copy",
+            "-pix_fmt", "yuv420p",
+            str(output_path),
+        ]
+        try:
+            subprocess.run(cmd, capture_output=True, check=True, timeout=7200)
+            return str(output_path) if Path(output_path).exists() else None
+        except Exception:
+            return None
+
+
 class ColorGrader:
     @staticmethod
     def match_histograms(source: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -56,6 +141,25 @@ class ColorGrader:
     @staticmethod
     def denoise(frame: np.ndarray, strength: int = 3) -> np.ndarray:
         return cv2.fastNlMeansDenoisingColored(frame, None, strength, strength, 7, 21)
+
+
+class FrameInterpolator:
+    @staticmethod
+    def interpolate(input_path: str, output_path: str, target_fps: int = 60) -> str | None:
+        import subprocess
+        try:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", input_path,
+                "-vf", f"minterpolate=fps={target_fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1",
+                "-c:v", "libx264", "-preset", "veryslow", "-crf", "14",
+                "-pix_fmt", "yuv420p",
+                str(output_path),
+            ]
+            subprocess.run(cmd, capture_output=True, check=True, timeout=7200)
+            return str(output_path) if Path(output_path).exists() else None
+        except Exception:
+            return None
 
 
 class VideoUpscaler:

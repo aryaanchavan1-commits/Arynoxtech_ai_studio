@@ -6,6 +6,11 @@ Turn any portrait photo into a **professional Marathi/English news anchor**. Ful
 - **NLP Amplifier** — Automatically enhances brief user prompts into cinematic production-quality descriptions. Better first-generation results = fewer retries = lower API spend. Turn "a man speaking about tech" into "cinematic neon-lit tech studio with volumetric lighting..."
 - **NLP Amplifier toggle** in Scene Description — enable/disable AI prompt enhancement per session
 - **`download_wav2lip.py`** — Standalone script to download the Wav2Lip GAN model with progress bars and 6 fallback mirrors
+- **Quality Presets** — Choose from Standard / Premium / Cinema modes (in sidebar)
+- **60fps Frame Interpolation** — Smooth motion via ffmpeg minterpolate (bidirectional motion compensation)
+- **Face Enhancement** — OpenCV-based face detail enhancement + edge-preserving filter on detected faces
+- **Multi-pass Post-Processing** — Denoise → Sharpen → Face enhance → Upscale → Frame interpolation → Final encode
+- **4K Output** — Native 3840x2160 upscale with Lanczos + CRF 14 veryslow encoding
 
 **New in v2.0:** Professional interleaved broadcast editing — anchor speaks, then cuts to cinematic B-roll, then back to anchor — like a real news channel. Kling AI generates 5-10s clips from scene-matched prompts. Sarvam AI Bulbul v3 with explicit voice selection (sumit/ishita/amit/priya).
 
@@ -140,6 +145,8 @@ Arynox-AI-Studio/
     character_compositor.py  Place character into studio scene
     theme_manager.py      Studio theme management
     utils.py              Shared utilities
+    video_quality.py       Quality presets: denoise, sharpen, face enhance, 60fps interpolation, 4K upscale
+    nlp_amplifier.py       NLP prompt enhancer (Groq-based)
 
     wav2lip/              Wav2Lip model code & face detection
   models/                 Downloaded AI models (gitignored)
