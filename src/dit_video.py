@@ -163,6 +163,8 @@ class CogVideoXBackend:
         num_inference_steps: int = None,
         on_progress=None,
     ) -> str | None:
+        from src.job_manager import cache_get, cache_put, cache_key
+
         if not self.loaded and not self.load(on_progress):
             return None
 
@@ -172,6 +174,14 @@ class CogVideoXBackend:
 
         guidance_scale = guidance_scale or config.DIT_GUIDANCE_SCALE
         num_inference_steps = num_inference_steps or config.DIT_NUM_INFERENCE_STEPS
+
+        ck = cache_key(prompt, "cogvideox", str(num_frames), str(num_inference_steps))
+        cached = cache_get(ck)
+        if cached:
+            if on_progress:
+                on_progress(100, "DiT: using cached clip")
+            Path(output_path).write_bytes(Path(cached).read_bytes())
+            return output_path
 
         try:
             from diffusers.utils import export_to_video
@@ -219,6 +229,9 @@ class CogVideoXBackend:
 
             export_to_video(frames, output_path, fps=12)
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+            if Path(output_path).exists():
+                cache_put(ck, output_path)
 
             if on_progress:
                 on_progress(100, "DiT: clip generated!")

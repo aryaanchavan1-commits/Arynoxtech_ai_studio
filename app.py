@@ -1,14 +1,23 @@
 import os
+import threading
+import time
 import traceback
+import uuid
 from pathlib import Path
 import streamlit as st
 import config
 from src.video_pipeline import run_full_pipeline
+from src.job_manager import start_job, get_job, list_jobs, list_incomplete_jobs, get_all_running_jobs
 
 for key in ["dit_ready", "use_dit", "use_generated_b_roll", "cinematic_style",
-             "image_loaded", "image_path", "selected_news", "visual_prompt", "use_kling"]:
+             "image_loaded", "image_path", "selected_news", "visual_prompt", "use_kling",
+             "active_job_id", "last_refresh"]:
     if key not in st.session_state:
         st.session_state[key] = False if key in ("dit_ready", "use_dit", "use_generated_b_roll", "image_loaded", "use_kling") else ""
+
+# Recover incomplete jobs from disk on page load
+if "recovered_jobs" not in st.session_state:
+    st.session_state.recovered_jobs = list_incomplete_jobs()
 
 st.set_page_config(page_title="Arynox AI Studio", page_icon="🎬", layout="wide", initial_sidebar_state="expanded")
 
@@ -349,19 +358,59 @@ with tab1:
         st.markdown("### 3. Generate")
         can_gen = (st.session_state.get("image_loaded", False)) and ((use_ai and topic.strip()) or (not use_ai and manual_text.strip()))
 
+        # ─── Jobs Panel ─────────────────────────────────────────────────────
+        incomplete = [get_job(j["id"]) for j in (st.session_state.get("recovered_jobs", []) + get_all_running_jobs()) if get_job(j["id"])["status"] in ("queued", "running")]
+        if st.session_state.get("active_job_id") or incomplete:
+            st.markdown("### Active Jobs")
+            for j in incomplete[:1]:
+                jid = j["id"]
+                pct = j.get("progress", 0)
+                msg = j.get("message", "")
+                st.progress(pct, text=f"**{j.get('title', 'Generating')}** — {msg}")
+                if pct < 1.0:
+                    st.caption(f"Job ID: {jid[:8]}...  |  Refresh to update")
+            # Auto-refresh every 3 seconds if jobs running
+            if incomplete and time.time() - st.session_state.get("last_refresh", 0) > 3:
+                st.session_state.last_refresh = time.time()
+                st.rerun()
+
+        # ─── Completed Jobs ─────────────────────────────────────────────────
+        recent = list_jobs()[:5]
+        if recent:
+            with st.expander("Recent Jobs", expanded=bool(st.session_state.get("active_job_id"))):
+                for j in recent:
+                    js = j["status"]
+                    icon = "✅" if js == "completed" else "❌" if js == "failed" else "⏳"
+                    with st.container():
+                        cols = st.columns([3, 1, 1])
+                        cols[0].markdown(f"{icon} **{j.get('title', 'Untitled')}**")
+                        cols[1].markdown(f"`{j['status']}`")
+                        if st == "completed" and Path(j.get("video_path", "")).exists():
+                            if cols[2].button("View", key=f"view_{j['id']}", use_container_width=True):
+                                st.session_state["view_job_id"] = j["id"]
+                                st.rerun()
+
+        # ─── View completed video ───────────────────────────────────────────
+        view_jid = st.session_state.get("view_job_id")
+        if view_jid:
+            j = get_job(view_jid)
+            if j["status"] == "completed" and Path(j.get("video_path", "")).exists():
+                st.markdown("### Your News Video")
+                st.video(j["video_path"])
+                st.download_button("Download Video",
+                    data=Path(j["video_path"]).read_bytes(),
+                    file_name=f"{j.get('title', 'video')[:30].replace(' ','_')}.mp4",
+                    mime="video/mp4", use_container_width=True)
+                if st.button("Clear", use_container_width=True):
+                    st.session_state.pop("view_job_id", None)
+                    st.rerun()
+
+        # ─── Generate Button ────────────────────────────────────────────────
         if st.button("Generate Video", type="primary", use_container_width=True, disabled=not can_gen):
             if not st.session_state.get("image_path"):
                 st.error("Please upload a character image first")
             else:
                 progress_ph = st.empty(); status_ph = st.empty(); video_ph = st.empty()
-                progress_bar = progress_ph.progress(0, text="Starting...")
-
-                def on_progress(pct, msg):
-                    try:
-                        progress_bar.progress(pct/100, text=msg)
-                        status_ph.info(msg)
-                    except Exception:
-                        pass
 
                 if api_key:
                     os.environ["GROQ_API_KEY"] = api_key; config.GROQ_API_KEY = api_key
@@ -375,55 +424,52 @@ with tab1:
                     music_path = str(config.ASSETS_DIR / "bg_music.mp3")
                     Path(music_path).write_bytes(music_file.getvalue())
 
-                try:
-                    sarvam_voice_selected = sarvam_voice if sarvam_voice and sarvam_voice != "auto" else None
-                    use_nlp_val = use_nlp and bool(api_key or config.GROQ_API_KEY)
-                    nlp_style = st.session_state.get("cinematic_style", "evening")
-                    if use_nlp_val and vis_prompt:
-                        try:
-                            from src.nlp_amplifier import amplify_prompt
-                            enhanced = amplify_prompt(vis_prompt, "cinematic" if nlp_style != "breaking" else "dramatic")
-                            if enhanced and enhanced != vis_prompt:
-                                st.session_state.visual_prompt = enhanced
-                                if on_progress:
-                                    on_progress(1, f"NLP: prompt enhanced ({len(vis_prompt)}→{len(enhanced)} chars)")
-                        except Exception:
-                            pass
-                    result = run_full_pipeline(
-                        character_image_path=st.session_state.image_path,
-                        topic=topic, manual_text=manual_text, news_style=news_style,
-                        voice=selected_voice, speed=speed, use_ai_script=use_ai,
-                        language=lang, gender=gender, accent=accent,
-                        duration_minutes=duration_minutes, use_elevenlabs=False,
-                        use_sarvam=use_sarvam, sarvam_voice=sarvam_voice_selected,
-                        use_longcat=use_longcat,
-                        use_dit=st.session_state.get("use_dit", False),
-                        use_kling=st.session_state.get("use_kling", False),
-                        on_progress=on_progress, studio_production=studio_production,
-                        anchor_name=anchor_name, channel_name=channel_name,
-                        show_name=show_name, studio_theme=studio_theme,
-                        enable_intro=enable_intro, enable_ticker=enable_ticker,
-                        motion_enhancement=motion_enhancement, music_path=music_path,
-                        use_generated_b_roll=st.session_state.get("use_generated_b_roll", True),
-                        cinematic_style=st.session_state.get("cinematic_style", "evening"),
-                        visual_prompt=st.session_state.get("visual_prompt", ""),
-                        quality_preset=quality_preset,
-                    )
-                    progress_bar.progress(1.0, text="Complete!")
-                    status_ph.success(f"Video generated: {result['title']}")
-                    with video_ph.container():
-                        st.markdown("### Your News Video")
-                        if Path(result["video_path"]).exists():
-                            st.video(result["video_path"])
-                            st.download_button("Download Video", data=Path(result["video_path"]).read_bytes(),
-                                file_name=f"{result['title'][:30].replace(' ','_')}.mp4", mime="video/mp4",
-                                use_container_width=True)
-                except Exception as e:
-                    progress_bar.progress(1.0)
-                    msg = str(e) if str(e) else "Unknown error during generation"
-                    status_ph.error(f"Generation failed: {msg}")
-                    if on_progress:
-                        on_progress(100, f"Failed: {msg}")
+                sarvam_voice_selected = sarvam_voice if sarvam_voice and sarvam_voice != "auto" else None
+                use_nlp_val = use_nlp and bool(api_key or config.GROQ_API_KEY)
+
+                # Build pipeline args
+                pipeline_kwargs = dict(
+                    character_image_path=st.session_state.image_path,
+                    topic=topic, manual_text=manual_text, news_style=news_style,
+                    voice=selected_voice, speed=speed, use_ai_script=use_ai,
+                    language=lang, gender=gender, accent=accent,
+                    duration_minutes=duration_minutes, use_elevenlabs=False,
+                    use_sarvam=use_sarvam, sarvam_voice=sarvam_voice_selected,
+                    use_longcat=use_longcat,
+                    use_dit=st.session_state.get("use_dit", False),
+                    use_kling=st.session_state.get("use_kling", False),
+                    studio_production=studio_production,
+                    anchor_name=anchor_name, channel_name=channel_name,
+                    show_name=show_name, studio_theme=studio_theme,
+                    enable_intro=enable_intro, enable_ticker=enable_ticker,
+                    motion_enhancement=motion_enhancement, music_path=music_path,
+                    use_generated_b_roll=st.session_state.get("use_generated_b_roll", True),
+                    cinematic_style=st.session_state.get("cinematic_style", "evening"),
+                    visual_prompt=st.session_state.get("visual_prompt", ""),
+                    quality_preset=quality_preset,
+                )
+
+                if use_nlp_val and vis_prompt:
+                    try:
+                        from src.nlp_amplifier import amplify_prompt
+                        nlp_style = st.session_state.get("cinematic_style", "evening")
+                        enhanced = amplify_prompt(vis_prompt, "cinematic" if nlp_style != "breaking" else "dramatic")
+                        if enhanced and enhanced != vis_prompt:
+                            pipeline_kwargs["visual_prompt"] = enhanced
+                    except Exception:
+                        pass
+
+                job_title = topic[:40] if topic else manual_text[:40]
+                job_id = start_job(
+                    job_id=f"vid_{uuid.uuid4().hex[:8]}",
+                    title=job_title,
+                    fn=lambda prog: run_full_pipeline(
+                        on_progress=prog, **pipeline_kwargs,
+                    ),
+                )
+                st.session_state.active_job_id = job_id
+                st.session_state.last_refresh = time.time()
+                st.rerun()
 
 with tab2:
     st.markdown("### Live News Fetch")

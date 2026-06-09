@@ -123,21 +123,21 @@ def download_weights(on_progress=None) -> bool:
     target = config.LONGCAT_WEIGHTS_DIR
     target.mkdir(parents=True, exist_ok=True)
 
-    def _try_hf_api(prog):
+    def _try_ms_api(prog):
         if prog:
-            prog(0, "Downloading LongCat weights (27GB)...")
+            prog(0, "Downloading LongCat weights (27GB) from ModelScope...")
         try:
-            from huggingface_hub import snapshot_download, logging as hf_logging
-            import logging
+            if config.MODELSCOPE_API_KEY:
+                from modelscope.hub.api import HubApi
+                api = HubApi()
+                api.login(config.MODELSCOPE_API_KEY)
 
-            hf_logging.set_verbosity_error()
+            from modelscope.hub.snapshot_download import snapshot_download
 
             snapshot_download(
-                repo_id="meituan-longcat/LongCat-Video-Avatar-1.5",
+                "meituan-longcat/LongCat-Video-Avatar-1.5",
                 local_dir=str(target),
                 resume_download=True,
-                ignore_patterns=["*.git*"],
-                local_dir_use_symlinks=False,
             )
             ok = any(target.iterdir())
             if prog:
@@ -145,7 +145,7 @@ def download_weights(on_progress=None) -> bool:
             return ok, "OK" if ok else "Incomplete"
         except ImportError:
             if prog:
-                prog(0, "huggingface_hub not found, trying CLI...")
+                prog(0, "modelscope not found, trying CLI...")
             return _cli_download(target, prog)
         except Exception as e:
             if prog:
@@ -154,12 +154,12 @@ def download_weights(on_progress=None) -> bool:
 
     def _cli_download(target_path, prog):
         if prog:
-            prog(0, "CLI fallback: downloading weights...")
+            prog(0, "CLI fallback: downloading weights via ModelScope...")
         try:
             proc = subprocess.Popen(
-                [sys.executable, "-m", "huggingface_hub", "download",
+                [sys.executable, "-m", "modelscope", "download",
                  "meituan-longcat/LongCat-Video-Avatar-1.5",
-                 "--local-dir", str(target_path), "--resume-download"],
+                 "--local-dir", str(target_path)],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1,
             )
@@ -184,7 +184,7 @@ def download_weights(on_progress=None) -> bool:
                 prog(0, f"CLI download error: {e}")
             return False, str(e)
 
-    return _run_with_retry(_try_hf_api, max_retries=3, retry_delay=10,
+    return _run_with_retry(_try_ms_api, max_retries=3, retry_delay=10,
                           on_progress=on_progress, label="Weight download")
 
 

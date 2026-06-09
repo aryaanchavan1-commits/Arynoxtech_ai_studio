@@ -34,6 +34,7 @@ REQUIREMENTS = [
     "requests",
     "pillow",
     "huggingface-hub",
+    "modelscope",
     "sarvamai",
 ]
 
@@ -141,15 +142,14 @@ except Exception as e:
         else:
             print("  This will take 15-30 minutes depending on your internet speed.")
             lc_weights.mkdir(parents=True, exist_ok=True)
-            run([python, "-m", "huggingface_hub", "download",
+            run([python, "-m", "modelscope", "download",
                  "meituan-longcat/LongCat-Video-Avatar-1.5",
-                 "--local-dir", str(lc_weights),
-                 "--resume-download"])
+                 "--local-dir", str(lc_weights)])
     else:
         print("\n  Skipping LongCat setup (requires CUDA GPU).")
         print("  When you get a GPU PC, run:")
         print("    git clone https://github.com/meituan-longcat/LongCat-Video.git models/LongCat-Video")
-        print("    huggingface-cli download meituan-longcat/LongCat-Video-Avatar-1.5 --local-dir models/LongCat-Video-Avatar-1.5")
+        print("    modelscope download meituan-longcat/LongCat-Video-Avatar-1.5 --local-dir models/LongCat-Video-Avatar-1.5")
 
     # Step 8: Verify installation
     step("Verifying installation...")

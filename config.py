@@ -25,6 +25,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
 LONGCAT_CHAT_API_KEY = os.getenv("LONGCAT_CHAT_API_KEY", "")
+MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "")
 
 # Device
 DEVICE = os.getenv("DEVICE", "auto")

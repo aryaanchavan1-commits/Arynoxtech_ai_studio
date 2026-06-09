@@ -3,25 +3,32 @@ Standalone script to download LongCat-Video-Avatar-1.5 model.
 
 Downloads:
   1. Clones the LongCat-Video GitHub repo (~2GB) with inference scripts
-  2. Downloads model weights from HuggingFace (~27GB)
+  2. Downloads model weights from ModelScope (~27GB)
 
 Usage:
     python download_longcat.py          # Full download
     python download_longcat.py --weights-only  # Skip repo clone
 """
 import argparse
+import os
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).parent
+load_dotenv(BASE_DIR / ".env")
 
 try:
-    from huggingface_hub import HfApi, snapshot_download
+    from modelscope.hub.snapshot_download import snapshot_download
 except ImportError:
-    print("Installing huggingface-hub...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "huggingface-hub"], check=True)
-    from huggingface_hub import HfApi, snapshot_download
+    print("Installing modelscope...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "modelscope"], check=True)
+    from modelscope.hub.snapshot_download import snapshot_download
+
+MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "")
 
 BASE_DIR = Path(__file__).parent
 MODELS_DIR = BASE_DIR / "models"
@@ -74,17 +81,30 @@ def download_weights() -> bool:
         size_gb = sum(f.stat().st_size for f in WEIGHTS_DIR.rglob("*") if f.is_file()) / 1e9
         print(f"  Weights already downloaded ({size_gb:.1f} GB)")
         return True
-    step("Downloading LongCat-Video-Avatar-1.5 weights (~27GB)...")
+    step("Downloading LongCat-Video-Avatar-1.5 weights (~27GB) from ModelScope...")
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
     print("  This will take 15-60 minutes depending on internet speed.")
-    return run_cmd(
-        [sys.executable, "-m", "huggingface_hub", "download",
-         "meituan-longcat/LongCat-Video-Avatar-1.5",
-         "--local-dir", str(WEIGHTS_DIR),
-         "--resume-download"],
-        desc="huggingface-cli download weights",
-        timeout=7200,
-    )
+    try:
+        if MODELSCOPE_API_KEY:
+            from modelscope.hub.api import HubApi
+            api = HubApi()
+            api.login(MODELSCOPE_API_KEY)
+        snapshot_download(
+            "meituan-longcat/LongCat-Video-Avatar-1.5",
+            local_dir=str(WEIGHTS_DIR),
+            resume_download=True,
+        )
+        return True
+    except Exception as e:
+        print(f"  ModelScope download failed: {e}")
+        print("  Falling back to CLI download...")
+        return run_cmd(
+            [sys.executable, "-m", "modelscope", "download",
+             "meituan-longcat/LongCat-Video-Avatar-1.5",
+             "--local-dir", str(WEIGHTS_DIR)],
+            desc="modelscope CLI download weights",
+            timeout=7200,
+        )
 
 
 def verify() -> bool:

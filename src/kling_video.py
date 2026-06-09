@@ -217,6 +217,19 @@ def generate_scene_video(
     max_retries: int = 3,
 ) -> str | None:
     global _kling_spend_counter
+
+    from src.job_manager import cache_get, cache_put, cache_key
+
+    ck = cache_key(prompt, config.KLING_MODEL, duration_sec, "kling")
+    cached = cache_get(ck)
+    if cached:
+        if on_progress:
+            on_progress(100, f"Kling: using cached scene")
+        if output_path:
+            Path(output_path).write_bytes(Path(cached).read_bytes())
+            return output_path
+        return cached
+
     if _kling_spend_counter >= KLING_MAX_SPEND:
         if on_progress:
             on_progress(0, "Kling spend cap reached, skipping remaining scenes")
@@ -237,6 +250,7 @@ def generate_scene_video(
         )
         if result:
             _kling_spend_counter += 1
+            cache_put(ck, result)
             return result
         if on_progress:
             on_progress(0, f"Kling attempt {attempt} failed, retrying...")
